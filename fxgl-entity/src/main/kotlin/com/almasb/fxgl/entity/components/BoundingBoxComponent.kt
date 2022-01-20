@@ -132,18 +132,43 @@ class BoundingBoxComponent(vararg boxes: HitBox) :
      */
     fun getMaxYWorld() = transform.y + getMinYLocal() + getHeight()
 
+    private var onHitBoxChangeRegistered = false
     private val onHitBoxChange = ListChangeListener<HitBox> { c ->
-        minXLocal.set(computeMinXLocal())
-        minYLocal.set(computeMinYLocal())
-        width.set(computeWidth())
-        height.set(computeHeight())
+        computeAndSetPosition()
 
         while (c.next()) {
             if (c.wasAdded()) {
-                c.addedSubList.forEach { it.bindXY(transform) }
+                if (::transform.isInitialized)
+                    c.addedSubList.forEach { it.bindXY(transform) }
             } else if (c.wasRemoved()) {
                 c.removed.forEach { it.unbind() }
             }
+        }
+    }
+
+    private fun watchHitBoxes() {
+        if (!onHitBoxChangeRegistered) {
+            hitBoxes.addListener(onHitBoxChange)
+            onHitBoxChangeRegistered = true
+        }
+    }
+
+    private fun unwatchHitBoxes() {
+        if (onHitBoxChangeRegistered) {
+            hitBoxes.removeListener(onHitBoxChange)
+            onHitBoxChangeRegistered = false
+        }
+    }
+
+    private fun onHitBoxChange(removed: List<HitBox>, added: List<HitBox>) {
+        computeAndSetPosition()
+
+        for (h in removed) {
+            h.unbind()
+        }
+        for (h in added) {
+            if (::transform.isInitialized)
+                h.bindXY(transform)
         }
     }
 
@@ -154,7 +179,7 @@ class BoundingBoxComponent(vararg boxes: HitBox) :
         width.set(computeWidth())
         height.set(computeHeight())
 
-        hitBoxes.addListener(onHitBoxChange)
+        watchHitBoxes()
     }
 
     override fun onAdded() {
@@ -167,10 +192,12 @@ class BoundingBoxComponent(vararg boxes: HitBox) :
         maxYWorld.bind(minYWorld.add(height))
 
         hitBoxes.forEach { it.bindXY(transform) }
+
+        watchHitBoxes()
     }
 
     override fun onRemoved() {
-        hitBoxes.removeListener(onHitBoxChange)
+        unwatchHitBoxes()
         hitBoxes.forEach { it.unbind() }
 
         minXWorld.unbind()
@@ -206,10 +233,49 @@ class BoundingBoxComponent(vararg boxes: HitBox) :
     }
 
     /**
+     * Remove and add hit boxes.
+     * This method will remove and then add hit boxes, it has the same effect as calling
+     * `removeHitBox(String)` and `addHitBox(HitBox)`, but the hitbox list callback
+     * will be called only once.
+     *
+     * @param toRemove hit box names to be removed
+     * @param toAdd the bounding boxes to be added
+     */
+    fun modifyHitBoxes(toRemove: List<String>, toAdd: List<HitBox>) {
+        if (onHitBoxChangeRegistered) {
+            hitBoxes.removeListener(onHitBoxChange)
+        }
+        try {
+            val removed = ArrayList<HitBox>()
+            hitBoxes.removeIf {
+                val shouldRemove = toRemove.contains(it.name)
+                if (shouldRemove) {
+                    removed.add(it)
+                }
+                shouldRemove
+            }
+            hitBoxes.addAll(toAdd)
+
+            onHitBoxChange(removed, toAdd)
+        } finally {
+            if (onHitBoxChangeRegistered) {
+                hitBoxes.addListener(onHitBoxChange)
+            }
+        }
+    }
+
+    /**
      * Remove all hit boxes.
      */
     fun clearHitBoxes() {
         hitBoxes.clear()
+    }
+
+    private fun computeAndSetPosition() {
+        minXLocal.set(computeMinXLocal())
+        minYLocal.set(computeMinYLocal())
+        width.set(computeWidth())
+        height.set(computeHeight())
     }
 
     /**
