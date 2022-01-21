@@ -588,6 +588,19 @@ class FXGLAssetLoaderService : AssetLoaderService() {
         log.debug("Clearing assets cache")
         cachedAssets.clear()
     }
+
+    /**
+     * A dev function, for removing cache.
+     * The name of the cache is implementation dependent,
+     * the name might change in future versions.
+     *
+     * @param id key of the resource in cache
+     * @return true if it exists and is removed, false otherwise
+     */
+    fun removeCache(id: String): Boolean {
+        log.debug("Clearing cache of asset $id")
+        return cachedAssets.remove(id) != null
+    }
 }
 
 private open class LoadParams(
